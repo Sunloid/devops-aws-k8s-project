@@ -9,3 +9,13 @@
 
 crash.log
 crash.*.log
+
+k8s/secret.yaml
+
+__pycache__/
+*.pyc
+venv/
+.env
+ 
+.DS_Store
+Thumbs.db
