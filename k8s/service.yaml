@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-app-service
+spec:
+  type: LoadBalancer         # provisions a real AWS Load Balancer, reachable from the internet
+  selector:
+    app: todo-app             # sends traffic to any pod with this label (matches deployment.yaml)
+  ports:
+    - protocol: TCP
+      port: 80                # the port people hit from outside (http://<load-balancer-url>)
+      targetPort: 8080         # the port your app actually listens on inside the container

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-app
+  labels:
+    app: todo-app
+spec:
+  replicas: 1                  # how many copies of the app to run
+  selector:
+    matchLabels:
+      app: todo-app             # tells the Deployment which pods it "owns"
+  template:                     # this is the actual pod blueprint
+    metadata:
+      labels:
+        app: todo-app            # must match selector above
+    spec:
+      containers:
+        - name: todo-app
+          image: 533267397460.dkr.ecr.ap-south-1.amazonaws.com/todo-app:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: todo-app-secret   # pulled from a Secret, not hardcoded
+                  key: mongo-uri
+          resources:                       # sets limits so one pod can't hog the node
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          readinessProbe:                  # "is this pod ready to receive traffic?"
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:                   # "is this pod still alive, or should it restart?"
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
