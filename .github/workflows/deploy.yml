@@ -1,0 +1,57 @@
+name: Build and Deploy to EKS
+
+# Runs automatically every time code is pushed to the main branch
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'              # only re-run this pipeline if app code actually changed
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: todo-app
+  EKS_CLUSTER_NAME: todo-app-cluster
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Get the code from the repo onto the GitHub Actions runner
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Authenticate this workflow to AWS using credentials stored as GitHub Secrets
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Step 3: Log Docker in to ECR so it's allowed to push images there
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Step 4: Build the Docker image and push it to ECR, tagged with the commit SHA
+      # (using the commit SHA instead of "latest" means every deploy is traceable to exact code)
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./app
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # Step 5: Connect kubectl (running on the GitHub Actions runner) to your EKS cluster
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      # Step 6: Tell the cluster to use the newly pushed image, triggering a rolling update
+      - name: Deploy new image to EKS
+        run: |
+          kubectl set image deployment/todo-app todo-app=${{ steps.build-image.outputs.image }}
+          kubectl rollout status deployment/todo-app
